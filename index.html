@@ -372,7 +372,7 @@
                 slidingWindowLayers: 0,
                 slidingWindowSize: 512,
                 mqaRateSlidingWindow: 1,
-                mqaRateFullCausal: 16  // MLA compression equivalent to 16:1 MQA
+                mqaRateFullCausal: 64  // MLA: single 512-dim latent for both K&V = 64:1 compression
             },
             'mixtral-8x7b': {
                 numLayers: 32,
@@ -596,7 +596,7 @@
             const sequenceLengths = [];
             const totalCache = [];
             
-            for (let i = 7; i <= 17; i += 0.1) {
+            for (let i = 7; i <= 20; i += 0.1) {  // Extended to 2^20 = ~1M
                 const seqLen = Math.round(Math.pow(2, i));
                 const cache = calculateKVCacheSize(seqLen, params);
                 
