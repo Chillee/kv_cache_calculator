@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LLM Inference - Time per Output Token Analysis</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #2c3e50;
+        }
+        
+        .formula-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .formula-section h2 {
+            margin-bottom: 15px;
+            color: #34495e;
+        }
+        
+        .controls {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .control-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        input[type="number"], select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        button.secondary {
+            background-color: #95a5a6;
+        }
+        
+        button.secondary:hover {
+            background-color: #7f8c8d;
+        }
+        
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+        }
+        
+        .plot {
+            width: 100%;
+            height: 500px;
+        }
+        
+        .data-table {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background-color: #ecf0f1;
+            font-weight: 600;
+        }
+        
+        .formula {
+            background-color: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        .formula-explanation {
+            margin-top: 15px;
+            line-height: 1.6;
+        }
+        
+        .formula-explanation ul {
+            margin-left: 20px;
+            margin-top: 10px;
+        }
+        
+        .formula-explanation li {
+            margin-bottom: 5px;
+        }
+        
+        .formula-text {
+            font-size: 12px;
+            display: inline-block;
+            margin: 0 2px;
+        }
+        
+        .param-value { color: #e74c3c; font-weight: 600; }
+        .param-compute { color: #3498db; font-weight: 600; }
+        .param-memory { color: #27ae60; font-weight: 600; }
+        .param-overhead { color: #f39c12; font-weight: 600; }
+        .param-context { color: #9b59b6; font-weight: 600; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Time per Output Token vs Context Length</h1>
+        
+        <div class="formula-section">
+            <h2>TPOT Calculation Formula</h2>
+            <div class="formula">
+                <p>The Time per Output Token (TPOT) is calculated as:</p>
+                <div id="formula-display">
+                    <!-- Formula will be dynamically generated here -->
+                </div>
+            </div>
+            <div class="formula-explanation">
+                <strong>Key components:</strong>
+                <ul>
+                    <li><strong>Model Size:</strong> Active Parameters × 2 bytes (FP16 precision)</li>
+                    <li><strong>KV Cache Size per Token:</strong> 2 × Number of KV Heads × Head Dimension × 2 bytes</li>
+                    <li><strong>Effective Memory Bandwidth:</strong> GPU Memory Bandwidth × Number of GPUs × 0.9 (efficiency factor)</li>
+                    <li><strong>Effective Compute:</strong> FP16 TFLOPS × Number of GPUs × 0.85 (efficiency factor)</li>
+                    <li><strong>Batching Overhead:</strong> log₁₀(Batch Size + 1) × 1.2</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <h2>Model Parameters</h2>
+            <div class="control-grid">
+                <div class="control-group">
+                    <label for="activeParams">Active Parameters (B)</label>
+                    <input type="number" id="activeParams" value="7" step="0.1" min="0.1">
+                </div>
+                <div class="control-group">
+                    <label for="headDim">Head Dimension</label>
+                    <input type="number" id="headDim" value="128" step="1" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="numKVHeads">Number of KV Heads</label>
+                    <input type="number" id="numKVHeads" value="32" step="1" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="batchSize">Batch Size</label>
+                    <input type="number" id="batchSize" value="1" step="1" min="1">
+                </div>
+            </div>
+            
+            <h2 style="margin-top: 30px; margin-bottom: 15px;">Hardware Configuration</h2>
+            <div class="control-grid">
+                <div class="control-group">
+                    <label for="gpuModel">GPU Model</label>
+                    <select id="gpuModel">
+                        <option value="a100">NVIDIA A100 (80GB)</option>
+                        <option value="h100">NVIDIA H100 (80GB)</option>
+                        <option value="a6000">NVIDIA A6000 (48GB)</option>
+                        <option value="4090">NVIDIA RTX 4090 (24GB)</option>
+                        <option value="v100">NVIDIA V100 (32GB)</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="memBandwidth">Memory Bandwidth (GB/s)</label>
+                    <input type="number" id="memBandwidth" value="2039" step="1" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="flopsFp16">FP16 TFLOPS</label>
+                    <input type="number" id="flopsFp16" value="624" step="1" min="1">
+                </div>
+                <div class="control-group">
+                    <label for="numGPUs">Number of GPUs</label>
+                    <input type="number" id="numGPUs" value="1" step="1" min="1">
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button onclick="updateChart()">Update Chart</button>
+                <button onclick="exportData()" class="secondary">Export to CSV</button>
+            </div>
+        </div>
+        
+        <div class="chart-container">
+            <div id="tpotChart" class="plot"></div>
+        </div>
+        
+        <div class="data-table">
+            <h3>Data Points</h3>
+            <table id="dataTable">
+                <thead>
+                    <tr>
+                        <th>Context Length</th>
+                        <th>TPOT (ms)</th>
+                        <th>Memory Time (ms)</th>
+                        <th>Compute Time (ms)</th>
+                        <th>Memory Bound?</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+    
+    <script>
+        // Configure MathJax
+        window.MathJax = {
+            tex: {
+                inlineMath: [['$', '$'], ['\\(', '\\)']],
+                displayMath: [['$$', '$$'], ['\\[', '\\]']]
+            }
+        };
+        
+        const gpuSpecs = {
+            'a100': { memBandwidth: 2039, fp16Tflops: 624 },
+            'h100': { memBandwidth: 3350, fp16Tflops: 1979 },
+            'a6000': { memBandwidth: 768, fp16Tflops: 155 },
+            '4090': { memBandwidth: 1008, fp16Tflops: 660 },
+            'v100': { memBandwidth: 900, fp16Tflops: 125 }
+        };
+        
+        document.getElementById('gpuModel').addEventListener('change', function(e) {
+            if (e.target.value !== 'custom') {
+                const specs = gpuSpecs[e.target.value];
+                document.getElementById('memBandwidth').value = specs.memBandwidth;
+                document.getElementById('flopsFp16').value = specs.fp16Tflops;
+            }
+        });
+        
+        function calculateTPOT(contextLength, params, hardware) {
+            // Model size in GB (assuming 2 bytes per parameter for FP16)
+            const modelSizeGB = params.activeParams * 2;
+            
+            // KV cache size per token in GB
+            const kvCacheSizePerToken = (2 * params.numKVHeads * params.headDim * 2) / 1e9;
+            
+            // Memory bandwidth required per token (model weights + KV cache)
+            const memoryBytesPerToken = (modelSizeGB * 1e9) + (kvCacheSizePerToken * contextLength * 1e9);
+            
+            // Compute required (FLOPs per token)
+            const flopsPerToken = 2 * params.activeParams * 1e9;
+            
+            // Effective bandwidth and compute with multiple GPUs
+            const effectiveBandwidth = hardware.memBandwidth * hardware.numGPUs * 0.9; // 90% efficiency
+            const effectiveCompute = hardware.flopsFp16 * 1e12 * hardware.numGPUs * 0.85; // 85% efficiency
+            
+            // Time limited by memory bandwidth (ms)
+            const memoryTime = (memoryBytesPerToken / (effectiveBandwidth * 1e9)) * 1000;
+            
+            // Time limited by compute (ms)
+            const computeTime = (flopsPerToken / effectiveCompute) * 1000;
+            
+            // Total time is max of memory and compute bound
+            const baseTime = Math.max(memoryTime, computeTime);
+            
+            // Additional factors
+            const batchingOverhead = Math.log10(params.batchSize + 1) * 1.2;
+            
+            const tpot = baseTime * (1 + batchingOverhead/10);
+            
+            return {
+                tpot: tpot,
+                memoryTime: memoryTime,
+                computeTime: computeTime,
+                isMemoryBound: memoryTime > computeTime
+            };
+        }
+        
+        function updateFormula() {
+            const params = {
+                activeParams: parseFloat(document.getElementById('activeParams').value),
+                headDim: parseInt(document.getElementById('headDim').value),
+                numKVHeads: parseInt(document.getElementById('numKVHeads').value),
+                batchSize: parseInt(document.getElementById('batchSize').value)
+            };
+            
+            const hardware = {
+                memBandwidth: parseFloat(document.getElementById('memBandwidth').value),
+                flopsFp16: parseFloat(document.getElementById('flopsFp16').value),
+                numGPUs: parseInt(document.getElementById('numGPUs').value)
+            };
+            
+            // Calculate derived values
+            const modelSizeGB = params.activeParams * 2;
+            const kvCacheSizePerToken = (2 * params.numKVHeads * params.headDim * 2) / 1e9;
+            const effectiveBandwidth = hardware.memBandwidth * hardware.numGPUs * 0.9;
+            const effectiveCompute = hardware.flopsFp16 * hardware.numGPUs * 0.85;
+            const batchingOverhead = Math.log10(params.batchSize + 1) * 1.2;
+            
+            const formulaHTML = `
+                $$\\text{TPOT} = \\max\\left(\\text{Memory Time}, \\text{Compute Time}\\right) \\times \\left(1 + \\frac{\\text{Batching Overhead}}{10}\\right)$$
+                <div style="text-align: center; margin-top: -10px;">
+                    <span class="formula-text">Time per Output Token</span> = 
+                    <span class="formula-text">max(</span><span class="formula-text param-memory">Memory Time</span><span class="formula-text">, </span><span class="formula-text param-compute">Compute Time</span><span class="formula-text">) × (1 + </span><span class="formula-text param-overhead">${batchingOverhead.toFixed(2)}</span><span class="formula-text">/10)</span>
+                </div>
+                
+                <br><br>Where:<br><br>
+                
+                $$\\text{Memory Time} = \\frac{\\text{Memory Bytes per Token}}{\\text{Effective Memory Bandwidth} \\times 10^9} \\times 1000 \\text{ ms}$$
+                <div style="text-align: center; margin-top: -10px;">
+                    <span class="formula-text param-memory">Memory Time</span> = 
+                    <span class="formula-text">Memory Bytes per Token / (</span><span class="formula-text param-memory">${effectiveBandwidth.toFixed(0)} GB/s</span><span class="formula-text"> × 10⁹) × 1000 ms</span>
+                </div>
+                
+                <br><br>
+                $$\\text{Memory Bytes per Token} = \\text{Model Size} \\times 10^9 + \\text{KV Cache Size per Token} \\times \\text{Context Length}$$
+                <div style="text-align: center; margin-top: -10px;">
+                    <span class="formula-text">Memory Bytes per Token = </span><span class="formula-text param-value">${modelSizeGB.toFixed(1)} GB</span><span class="formula-text"> × 10⁹ + </span><span class="formula-text param-value">${(kvCacheSizePerToken * 1e9).toFixed(0)} bytes</span><span class="formula-text"> × </span><span class="formula-text param-context">Context Length</span>
+                </div>
+                
+                <br><br>
+                $$\\text{Compute Time} = \\frac{\\text{FLOPs per Token}}{\\text{Effective Compute}} \\times 1000 \\text{ ms} = ${(2 * params.activeParams * 1e9 / effectiveCompute * 1000).toFixed(3)} \\text{ ms}$$
+                <div style="text-align: center; margin-top: -10px;">
+                    <span class="formula-text param-compute">Compute Time</span> = 
+                    <span class="formula-text">(2 × </span><span class="formula-text param-value">${params.activeParams}B</span><span class="formula-text"> × 10⁹) / (</span><span class="formula-text param-compute">${(effectiveCompute/1e12).toFixed(1)} TFLOPS</span><span class="formula-text"> × 10¹²) × 1000 ms = </span><span class="formula-text param-compute">${(2 * params.activeParams * 1e9 / effectiveCompute * 1000).toFixed(3)} ms</span>
+                </div>
+                
+                <br><div style="background: #f8f9fa; padding: 15px; border-radius: 4px; margin-top: 20px;">
+                <strong>Current Parameter Values:</strong><br><br>
+                • <span class="param-value">Model Size</span>: ${modelSizeGB.toFixed(1)} GB (${params.activeParams}B params × 2 bytes)<br>
+                • <span class="param-value">KV Cache per Token</span>: ${(kvCacheSizePerToken * 1e9).toFixed(0)} bytes (2 × ${params.numKVHeads} heads × ${params.headDim} dim × 2 bytes)<br>
+                • <span class="param-memory">Effective Memory BW</span>: ${effectiveBandwidth.toFixed(0)} GB/s (${hardware.numGPUs} GPU${hardware.numGPUs > 1 ? 's' : ''} × ${hardware.memBandwidth} GB/s × 0.9 efficiency)<br>
+                • <span class="param-compute">Effective Compute</span>: ${(effectiveCompute/1e12).toFixed(1)} TFLOPS (${hardware.numGPUs} GPU${hardware.numGPUs > 1 ? 's' : ''} × ${hardware.flopsFp16} TFLOPS × 0.85 efficiency)<br>
+                • <span class="param-overhead">Batching Overhead</span>: ${batchingOverhead.toFixed(2)} (log₁₀(${params.batchSize} + 1) × 1.2) → Factor: ${(1 + batchingOverhead/10).toFixed(3)}<br>
+                • <span class="param-context">Context Length</span>: Variable (shown in chart)
+                </div>
+            `;
+            
+            document.getElementById('formula-display').innerHTML = formulaHTML;
+            
+            // Re-render MathJax
+            if (window.MathJax) {
+                MathJax.typesetPromise([document.getElementById('formula-display')]).catch((e) => console.error(e));
+            }
+        }
+        
+        function updateChart() {
+            const params = {
+                activeParams: parseFloat(document.getElementById('activeParams').value),
+                headDim: parseInt(document.getElementById('headDim').value),
+                numKVHeads: parseInt(document.getElementById('numKVHeads').value),
+                batchSize: parseInt(document.getElementById('batchSize').value)
+            };
+            
+            const hardware = {
+                memBandwidth: parseFloat(document.getElementById('memBandwidth').value),
+                flopsFp16: parseFloat(document.getElementById('flopsFp16').value),
+                numGPUs: parseInt(document.getElementById('numGPUs').value)
+            };
+            
+            // Update formula display
+            updateFormula();
+            
+            // Generate data points for various context lengths
+            const contextLengths = [];
+            const tpotValues = [];
+            const memoryTimes = [];
+            const computeTimes = [];
+            const boundTypes = [];
+            
+            // Generate context lengths from 128 to 128k
+            for (let i = 7; i <= 17; i += 0.1) {
+                const contextLength = Math.round(Math.pow(2, i));
+                const result = calculateTPOT(contextLength, params, hardware);
+                
+                contextLengths.push(contextLength);
+                tpotValues.push(result.tpot);
+                memoryTimes.push(result.memoryTime);
+                computeTimes.push(result.computeTime);
+                boundTypes.push(result.isMemoryBound);
+            }
+            
+            // Create traces
+            const tpotTrace = {
+                x: contextLengths,
+                y: tpotValues,
+                mode: 'lines',
+                name: 'TPOT',
+                line: { width: 3 }
+            };
+            
+            const memoryTrace = {
+                x: contextLengths,
+                y: memoryTimes,
+                mode: 'lines',
+                name: 'Memory Time',
+                line: { dash: 'dash', width: 2 }
+            };
+            
+            const computeTrace = {
+                x: contextLengths,
+                y: computeTimes,
+                mode: 'lines',
+                name: 'Compute Time',
+                line: { dash: 'dash', width: 2 }
+            };
+            
+            const layout = {
+                title: `Time per Output Token vs Context Length<br>${params.activeParams}B Model on ${hardware.numGPUs} GPU(s)`,
+                xaxis: {
+                    title: 'Context Length (tokens)',
+                    type: 'log',
+                    tickformat: '.0f'
+                },
+                yaxis: {
+                    title: 'Time (ms)',
+                    type: 'log'
+                },
+                hovermode: 'x unified'
+            };
+            
+            Plotly.newPlot('tpotChart', [tpotTrace, memoryTrace, computeTrace], layout);
+            
+            // Update table with sample points
+            updateTable(contextLengths, tpotValues, memoryTimes, computeTimes, boundTypes);
+        }
+        
+        function updateTable(contextLengths, tpotValues, memoryTimes, computeTimes, boundTypes) {
+            const tbody = document.querySelector('#dataTable tbody');
+            tbody.innerHTML = '';
+            
+            // Show every 10th point in the table
+            for (let i = 0; i < contextLengths.length; i += 10) {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td>${contextLengths[i].toLocaleString()}</td>
+                    <td>${tpotValues[i].toFixed(3)}</td>
+                    <td>${memoryTimes[i].toFixed(3)}</td>
+                    <td>${computeTimes[i].toFixed(3)}</td>
+                    <td>${boundTypes[i] ? 'Yes' : 'No'}</td>
+                `;
+            }
+        }
+        
+        function exportData() {
+            const params = {
+                activeParams: parseFloat(document.getElementById('activeParams').value),
+                headDim: parseInt(document.getElementById('headDim').value),
+                numKVHeads: parseInt(document.getElementById('numKVHeads').value),
+                batchSize: parseInt(document.getElementById('batchSize').value)
+            };
+            
+            const hardware = {
+                memBandwidth: parseFloat(document.getElementById('memBandwidth').value),
+                flopsFp16: parseFloat(document.getElementById('flopsFp16').value),
+                numGPUs: parseInt(document.getElementById('numGPUs').value)
+            };
+            
+            let csv = 'Context Length,TPOT (ms),Memory Time (ms),Compute Time (ms),Memory Bound\n';
+            
+            for (let i = 7; i <= 17; i += 0.5) {
+                const contextLength = Math.round(Math.pow(2, i));
+                const result = calculateTPOT(contextLength, params, hardware);
+                csv += `${contextLength},${result.tpot.toFixed(3)},${result.memoryTime.toFixed(3)},${result.computeTime.toFixed(3)},${result.isMemoryBound}\n`;
+            }
+            
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tpot_vs_context_length.csv';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        // Add event listeners to update formula when parameters change
+        document.getElementById('activeParams').addEventListener('input', updateFormula);
+        document.getElementById('headDim').addEventListener('input', updateFormula);
+        document.getElementById('numKVHeads').addEventListener('input', updateFormula);
+        document.getElementById('batchSize').addEventListener('input', updateFormula);
+        document.getElementById('memBandwidth').addEventListener('input', updateFormula);
+        document.getElementById('flopsFp16').addEventListener('input', updateFormula);
+        document.getElementById('numGPUs').addEventListener('input', updateFormula);
+        document.getElementById('gpuModel').addEventListener('change', function() {
+            setTimeout(updateFormula, 50); // Small delay to let values update
+        });
+        
+        // Initialize chart on load
+        window.onload = function() {
+            updateChart();
+        };
+    </script>
+</body>
+</html>
