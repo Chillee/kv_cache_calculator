@@ -642,6 +642,8 @@
             const params = new URLSearchParams();
             if (configData.length > 0) {
                 params.set('configs', JSON.stringify(configData));
+                // Also save the precision setting
+                params.set('precision', document.getElementById('precision').value);
             }
             
             const newURL = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
@@ -651,11 +653,25 @@
         function loadFromURL() {
             const params = new URLSearchParams(window.location.search);
             const configsParam = params.get('configs');
+            const precisionParam = params.get('precision');
+            
+            // Load precision if available
+            if (precisionParam) {
+                document.getElementById('precision').value = precisionParam;
+            }
             
             if (configsParam) {
                 try {
                     const configs = JSON.parse(configsParam);
-                    configs.forEach(c => {
+                    
+                    // Process each config with proper timing
+                    let configIndex = 0;
+                    
+                    function loadNextConfig() {
+                        if (configIndex >= configs.length) return;
+                        
+                        const c = configs[configIndex];
+                        
                         // Set parameters
                         document.getElementById('numLayers').value = c.nl;
                         document.getElementById('headDim').value = c.hd;
@@ -667,20 +683,31 @@
                         // Set custom name if available
                         if (c.name) {
                             document.getElementById('configName').value = c.name;
+                        } else {
+                            document.getElementById('configName').value = '';
                         }
                         
                         // Update MQA dropdowns
                         updateMQADropdowns();
                         
-                        // Set MQA values after a short delay
+                        // Set MQA values after dropdowns are populated
                         setTimeout(() => {
                             document.getElementById('mqaRateSlidingWindow').value = c.swm;
                             document.getElementById('mqaRateFullCausal').value = c.fcm;
                             
                             // Add the configuration
                             addConfiguration();
+                            
+                            // Clear name field for next config
+                            document.getElementById('configName').value = '';
+                            
+                            // Load next config
+                            configIndex++;
+                            loadNextConfig();
                         }, 50);
-                    });
+                    }
+                    
+                    loadNextConfig();
                 } catch (e) {
                     console.error('Failed to load configurations from URL:', e);
                 }
@@ -846,9 +873,7 @@
             updateFormula();
             
             // Load configurations from URL if present
-            setTimeout(() => {
-                loadFromURL();
-            }, 100);
+            loadFromURL();
         };
     </script>
 </body>
